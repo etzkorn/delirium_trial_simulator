@@ -8,7 +8,17 @@
 #' @return tibble with variables
 
 
-simulate.competing.data <- function(n, K = 28, par0){
+simulate.competing.data <- function(n=1200, K = 28,
+									par0 = c(shapeR = 0.34, scaleR = 6.64,
+                  shapeM = 2, scaleM = 20.5,
+                  shapeD = 1.51, scaleD = 12.23,
+                  sigma = 0.24,
+                  alphaM = 0,
+                  alphaD = 0,
+                  betaR = 0,
+                  betaM = 0,
+                  betaD = 0)){
+set.seed(654321)
 tibble(
 id = 1:n,
 trt = sample(rep(0:1, length = n)),
@@ -30,7 +40,7 @@ t =  map2(w,trt,
           	            shape = par0["shapeR"],
           	            scale = par0["scaleR"],
           	            rh = exp(.x + par0["betaR"] * .y)) %>%
-		  	    rbind(rweibull(50, shape = 1, scale = 2)) %>%
+		  	    rbind(rep(1, 50)) %>%
 		  	    cumsum,
 		  	event = rep(1:0, length = 100)
 		  	)
@@ -40,12 +50,11 @@ dplyr::select(-T1, -T2, -w) %>%
 unnest(t) %>%
 group_by(id) %>%
 mutate(tstart = c(0, t[-n()])) %>%
-dplyr::filter(tstart<=y)%>%
 mutate(terminal1 = terminal1*(t > y),
 	   terminal2 = terminal2*(t > y),
 	   event = event*(t < y),
 	   t = ifelse(t > y, y, t)) %>%
-dplyr::select(-y) %>%
+filter(tstart < t) %>%
 ungroup %>%
 group_by(id) %>%
 group_modify(
@@ -60,11 +69,12 @@ group_modify(
 			 state = ifelse(is.na(delirium)&sum(.x$terminal1)>0, "Dead",
 			 			   ifelse(is.na(delirium)&sum(.x$terminal2)>0, "Discharged",
 			 			   	   ifelse(delirium==1, "Delirium", "No Delirium"))),
-			 losic = pmin(28, min(day[is.na(delirium)])),
-			 died = sum(.x$terminal1),
-			 discharged = sum(.x$terminal2),
+			 losic = min(c(28,day[is.na(delirium)])),
+			 died = max(.x$terminal1),
+			 discharged = max(.x$terminal2),
 			 trt = .x$trt[1])
 )
+
 }
 
 rweibRH <- function(n, shape ,scale , rh){
